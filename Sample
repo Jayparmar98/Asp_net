@@ -1,0 +1,65 @@
+pipeline {
+    agent {
+  label 'Master'
+}
+    stages {
+        stage('Checkout Github') {
+            steps {
+            git branch: 'main', credentialsId: '10', url: 'https://github.com/Jayparmar98/dotnet.git'
+            sh "ls -lah"
+            }
+        }
+
+        stage('Build') {
+            steps{
+        sh """
+        dotnet build -c Release /p:Version=${BUILD_ID}
+        dotnet publish -c Release --no-build
+        """
+            }
+        }
+
+         stage('Zip Folder') {
+            steps {
+        script {
+           
+            def sourceDir = '/var/lib/jenkins/workspace/AspDotnet/asp.net/bin/Release/net6.0/publish/'
+            def targetDir = '/var/lib/jenkins/workspace/AspDotnet/asp.net/bin/Release/net6.0/publish/final_arti'
+            def zipFileName = "aspdotnet_${BUILD_ID}.zip"
+            sh "cd $sourceDir && zip -r $targetDir/$zipFileName ./*"
+            sh "ls -l $targetDir"
+            
+        }
+    }
+}
+
+         stage('Upload to Nexus') {
+            steps {
+        script {
+            
+            def artifactsDir = '/var/lib/jenkins/workspace/AspDotnet/asp.net/bin/Release/net6.0/publish/final_arti/'
+            def nexusUrl = 'http://20.197.19.232:8081/repository/Maven-Host/'
+            def nexusUsername = 'admin'
+            def nexusPassword = 'Jay@123'
+            sh "cd $artifactsDir && find . -type f -print0 | xargs -0 -I {} curl -u $nexusUsername:$nexusPassword --upload-file {} $nexusUrl/{}"
+            echo "All artifacts uploaded to Nexus successfully!"
+        }
+    }
+}
+
+stage('Play Ansible Playbook') {
+    steps {
+        script {
+            def playbookDir = '/etc/ansible/'
+            def inventoryFile = '/etc/ansible/hosts'
+            def extraArgs = '-e "var1=value1 var2=value2"'
+            sh "ansible-playbook -i $inventoryFile $extraArgs $playbookDir/Latest_Artifacts.yml"
+              }
+          }
+      }
+
+        
+    
+
+    }
+}
